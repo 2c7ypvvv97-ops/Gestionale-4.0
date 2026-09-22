@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import pandas as pd
 from database import get_db_connection
@@ -30,6 +31,9 @@ def render():
 
         if uploaded_file is not None:
             try:
+                # Estrarre nome del modello dal nome del file (es: "CENTRALINA_XYZ.xlsx" -> "CENTRALINA_XYZ")
+                nome_modello_da_filename = os.path.splitext(uploaded_file.name)[0].strip().upper()
+
                 if uploaded_file.name.endswith('.csv'):
                     df_upload = pd.read_csv(uploaded_file)
                 else:
@@ -38,79 +42,97 @@ def render():
                 st.success(f"📂 File **{uploaded_file.name}** letto con successo! ({len(df_upload)} righe trovate)")
                 st.dataframe(df_upload.head(5), use_container_width=True, hide_index=True)
 
-                st.markdown("##### ⚙️ Mappatura Colonne del File")
+                st.markdown("##### ⚙️ Mappatura Dati e Colonne")
+
+                # Opzione per definire la fonte del nome della centralina/modello
+                fonte_modello = st.radio(
+                    "Da dove prendere il Nome del Modello / Centralina?",
+                    ["Nome del File Caricato", "Da una Colonna del File"],
+                    horizontal=True
+                )
+
                 colonne = list(df_upload.columns)
 
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    col_modello = st.selectbox(
-                        "Colonna Modello / Codice Scheda", 
-                        colonne, 
-                        index=0 if len(colonne) > 0 else 0
-                    )
-                with c2:
-                    col_pn = st.selectbox(
-                        "Colonna Part Number Componente", 
-                        colonne, 
-                        index=1 if len(colonne) > 1 else 0
-                    )
-                with c3:
-                    col_qta = st.selectbox(
-                        "Colonna Quantità Richiesta", 
-                        colonne, 
-                        index=2 if len(colonne) > 2 else 0
-                    )
+                if fonte_modello == "Nome del File Caricato":
+                    modello_finale = st.text_input(
+                        "Codice Modello / Centralina estratto dal nome del file:",
+                        value=nome_modello_da_filename
+                    ).strip().upper()
+                    col_modello = None
+                    
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        col_pn = st.selectbox("Colonna Part Number Componente", colonne, index=0 if len(colonne) > 0 else 0)
+                    with c2:
+                        col_qta = st.selectbox("Colonna Quantità Richiesta", colonne, index=1 if len(colonne) > 1 else 0)
+                else:
+                    modello_finale = None
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        col_modello = st.selectbox("Colonna Modello / Codice Scheda", colonne, index=0 if len(colonne) > 0 else 0)
+                    with c2:
+                        col_pn = st.selectbox("Colonna Part Number Componente", colonne, index=1 if len(colonne) > 1 else 0)
+                    with c3:
+                        col_qta = st.selectbox("Colonna Quantità Richiesta", colonne, index=2 if len(colonne) > 2 else 0)
 
                 if st.button("🚀 Conferma e Importa File nel Database", type="primary", use_container_width=True):
-                    conn = get_db_connection()
-                    if conn:
-                        try:
-                            cursor = conn.cursor()
-                            count_ins = 0
+                    if fonte_modello == "Nome del File Caricato" and not modello_finale:
+                        st.error("Inserisci un nome valido per il Modello/Centralina.")
+                    else:
+                        conn = get_db_connection()
+                        if conn:
+                            try:
+                                cursor = conn.cursor()
+                                count_ins = 0
 
-                            for _, row in df_upload.iterrows():
-                                mod = str(row[col_modello]).strip().upper()
-                                pn = str(row[col_pn]).strip().upper()
-
-                                try:
-                                    qta = int(float(row[col_qta])) if pd.notnull(row[col_qta]) else 1
-                                except (ValueError, TypeError):
-                                    qta = 1
-
-                                if mod and pn and mod != "NAN" and pn != "NAN" and qta > 0:
-                                    # Registra in Part Numbers
-                                    cursor.execute("""
-                                        INSERT OR IGNORE INTO part_numbers (pn_codice, descrizione, ubicazione)
-                                        VALUES (?, ?, 'SCAFFALE-STD')
-                                    """, (pn, f"Componente {pn}"))
-
-                                    # Registra in Magazzino se assente
-                                    cursor.execute("""
-                                        INSERT OR IGNORE INTO magazzino_quantita (pn_codice, quantita_disponibile, ubicazione)
-                                        VALUES (?, 0, 'SCAFFALE-STD')
-                                    """, (pn,))
-
-                                    # Salvataggio BOM
-                                    if "Centralina Finale" in tipo_bom:
-                                        cursor.execute("""
-                                            INSERT OR REPLACE INTO distinte_basi (modello, pn_componente, quantita_richiesta)
-                                            VALUES (?, ?, ?)
-                                        """, (mod, pn, qta))
+                                for _, row in df_upload.iterrows():
+                                    # Determina il modello in base alla scelta dell'utente
+                                    if fonte_modello == "Nome del File Caricato":
+                                        mod = modello_finale
                                     else:
+                                        mod = str(row[col_modello]).strip().upper()
+
+                                    pn = str(row[col_pn]).strip().upper()
+
+                                    try:
+                                        qta = int(float(row[col_qta])) if pd.notnull(row[col_qta]) else 1
+                                    except (ValueError, TypeError):
+                                        qta = 1
+
+                                    if mod and pn and mod != "NAN" and pn != "NAN" and qta > 0:
+                                        # Registra in Part Numbers se assente
                                         cursor.execute("""
-                                            INSERT OR REPLACE INTO distinte_sotto_schede (pn_sotto_scheda, pn_componente, quantita_richiesta)
-                                            VALUES (?, ?, ?)
-                                        """, (mod, pn, qta))
+                                            INSERT OR IGNORE INTO part_numbers (pn_codice, descrizione, ubicazione)
+                                            VALUES (?, ?, 'SCAFFALE-STD')
+                                        """, (pn, f"Componente {pn}"))
 
-                                    count_ins += 1
+                                        # Registra in Magazzino se assente
+                                        cursor.execute("""
+                                            INSERT OR IGNORE INTO magazzino_quantita (pn_codice, quantita_disponibile, ubicazione)
+                                            VALUES (?, 0, 'SCAFFALE-STD')
+                                        """, (pn,))
 
-                            conn.commit()
-                            st.success(f"🎉 Importazione completata con successo! Registrate/Aggiornate **{count_ins}** righe.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Errore durante l'importazione: {e}")
-                        finally:
-                            conn.close()
+                                        # Salvataggio BOM
+                                        if "Centralina Finale" in tipo_bom:
+                                            cursor.execute("""
+                                                INSERT OR REPLACE INTO distinte_basi (modello, pn_componente, quantita_richiesta)
+                                                VALUES (?, ?, ?)
+                                            """, (mod, pn, qta))
+                                        else:
+                                            cursor.execute("""
+                                                INSERT OR REPLACE INTO distinte_sotto_schede (pn_sotto_scheda, pn_componente, quantita_richiesta)
+                                                VALUES (?, ?, ?)
+                                            """, (mod, pn, qta))
+
+                                        count_ins += 1
+
+                                conn.commit()
+                                st.success(f"🎉 Importazione completata con successo per il modello **'{modello_finale if modello_finale else 'selezionato'}'**! Registrate/Aggiornate **{count_ins}** righe.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Errore durante l'importazione: {e}")
+                            finally:
+                                conn.close()
 
             except Exception as e:
                 st.error(f"Impossibile leggere il file: {e}")
