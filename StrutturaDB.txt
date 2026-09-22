@@ -1,0 +1,88 @@
+┌────────────────────────┐
+               │         UTENTI         │
+               ├────────────────────────┤
+               │ PK id                  │
+               │    username            │
+               │    password_hash       │
+               │    salt                │
+               │    ruolo               │
+               │    attivo              │
+               └────────────────────────┘
+
+  ┌────────────────────────┐        ┌────────────────────────┐
+  │        CLIENTI         │        │        COMMESSE        │
+  ├────────────────────────┤        ├────────────────────────┤
+  │ PK id                  │        │ PK id                  │
+  │    codice_cliente      │◄───────┤    codice_commessa     │
+  │    ragione_sociale     │        │ FK codice_cliente      │
+  │    referente           │        │    modello_centralina  │
+  └────────────────────────┘        │    quantita_totale     │
+                                    │    stato               │
+  ┌────────────────────────┐        └───────────┬────────────┘
+  │    CONFIG_TIPOLOGIE    │                    │
+  ├────────────────────────┤                    │
+  │ PK id                  │                    │
+  │    tipologia           │                    │
+  └────────────────────────┘                    ▼
+                                    ┌────────────────────────┐
+  ┌────────────────────────┐        │       CENTRALINE       │
+  │      PART_NUMBERS      │        ├────────────────────────┤
+  ├────────────────────────┤        │ PK serial_centralina   │
+  │ PK pn_codice           │◄──┐    │ FK commessa_padre      │
+  │    descrizione         │   │    │    tipologia           │
+  │    ubicazione          │   │    │    fase_attuale        │
+  └───────────┬────────────┘   │    └───────────┬────────────┘
+              │                │                │
+              ├────────────────┼────────────────┼────────────────────────┐
+              ▼                │                │                        │
+  ┌────────────────────────┐   │                ▼                        │
+  │     DISTINTE_BASI      │   │    ┌────────────────────────┐           │
+  ├────────────────────────┤   │    │      STORICO_FASI      │           │
+  │ PK id                  │   │    ├────────────────────────┤           │
+  │    modello             │   │    │ PK id                  │           │
+  │ FK pn_componente       ├───┤    │ FK serial_centralina   │           │
+  └────────────────────────┘   │    │    fase_destinazione   │           │
+                               │    │    operatore           │           │
+  ┌────────────────────────┐   │    └────────────────────────┘           │
+  │ DISTINTE_SOTTO_SCHEDE  │   │                                         │
+  ├────────────────────────┤   │    ┌────────────────────────┐           │
+  │ PK id                  │   │    │ COMPONENTI_CENTRALINA  │           │
+  │    pn_sotto_scheda     │   │    ├────────────────────────┤           │
+  │ FK pn_componente       ├───┤    │ PK id                  │           │
+  └────────────────────────┘   │    │ FK serial_centralina   ├───────────┘
+                               │    │ FK pn_codice           │
+  ┌────────────────────────┐   │    └────────────────────────┘
+  │   MAGAZZINO_QUANTITA   │   │
+  ├────────────────────────┤   │    ┌────────────────────────┐
+  │ PK pn_codice           ├───┼───►│RMA_STORICO_CARICHI_MAG │
+  │    quantita_disponibile│   │    ├────────────────────────┤
+  └────────────────────────┘   │    │ PK id                  │
+                               │    │ FK pn_codice           │
+                               │    └────────────────────────┘
+                               │
+                               │    ┌────────────────────────┐
+                               │    │    RMA_SEGNALAZIONI    │
+                               │    ├────────────────────────┤
+                               │    │ PK id                  │
+                               ├───►│    codice_rma          │
+                               │    │ FK serial_centralina   │
+                               │    │ FK codice_cliente      │
+                               │    │    stato               │
+                               │    └───────────┬────────────┘
+                               │                │
+                               │                ▼
+                               │    ┌────────────────────────┐
+                               │    │    RMA_RIPARAZIONI     │
+                               │    ├────────────────────────┤
+                               │    │ PK id                  │
+                               │    │ FK rma_id              │
+                               │    │    esito               │
+                               │    └────────────────────────┘
+                               │
+                               │    ┌────────────────────────┐
+                               │    │   RMA_RICAMBI_USATI    │
+                               │    ├────────────────────────┤
+                               │    │ PK id                  │
+                               │    │ FK rma_id              │
+                               └───►│ FK pn_componente       │
+                                    └────────────────────────┘
