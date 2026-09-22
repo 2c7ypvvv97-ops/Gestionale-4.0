@@ -80,25 +80,26 @@ def render():
                 else:
                     st.info(f"📈 **Stato Produzione**: **{qta_prodotta} / {qta_max} pz** prodotti per la commessa **{commessa_sel}** (Rimanenti: **{qta_max - qta_prodotta} pz**).")
 
-                # --- VERIFICA COMPONENTI BOM ---
-                st.markdown("##### 🔍 Componenti Richiesti da BOM (Magazzino)")
-                conn = get_db_connection()
-                bom_items = []
-                mancanti = []
-                if conn:
-                    try:
-                        cursor = conn.cursor()
-                        cursor.execute("""
-                            SELECT d.pn_componente, d.quantita_richiesta, COALESCE(m.quantita_disponibile, 0) as giacenza
-                            FROM distinte_basi d
-                            LEFT JOIN magazzino_quantita m ON d.pn_componente = m.pn_codice
-                            WHERE d.modello = ?
-                        """, (modello_sel,))
-                        bom_items = cursor.fetchall()
-                    except Exception as e:
-                        st.error(f"Errore lettura distinta base: {e}")
-                    finally:
-                        conn.close()
+                    # --- VERIFICA COMPONENTI BOM ---
+                    st.markdown("##### 🔍 Componenti Richiesti da BOM (Magazzino)")
+                    conn = get_db_connection()
+                    bom_items = []
+                    mancanti = []
+                    if conn:
+                        try:
+                            cursor = conn.cursor()
+                            # Uso UPPER(TRIM(...)) per evitare fallimenti dovuti a Maiuscole/Minuscole o spazi
+                            cursor.execute("""
+                                SELECT d.pn_componente, d.quantita_richiesta, COALESCE(m.quantita_disponibile, 0) as giacenza
+                                FROM distinte_basi d
+                                LEFT JOIN magazzino_quantita m ON d.pn_componente = m.pn_codice
+                                WHERE UPPER(TRIM(d.modello)) = UPPER(TRIM(?))
+                            """, (modello_sel,))
+                            bom_items = cursor.fetchall()
+                        except Exception as e:
+                            st.error(f"Errore lettura distinta base: {e}")
+                        finally:
+                            conn.close()
 
                 if bom_items:
                     df_bom = pd.DataFrame([dict(b) for b in bom_items])
