@@ -7,6 +7,10 @@ def render():
     st.header("📋 Gestione Distinte Basi (BOM)")
     st.markdown("Gestisci la composizione dei modelli di centraline e delle sotto-schede componibili.")
 
+    # Inizializza la chiave per il reset del file_uploader se non esiste
+    if "bom_uploader_key" not in st.session_state:
+        st.session_state["bom_uploader_key"] = 0
+
     # Controllo Ruolo Utente
     utente_loggato = st.session_state.get("utente_loggato", {})
     es_admin = utente_loggato.get("ruolo") == "Admin"
@@ -27,7 +31,12 @@ def render():
         st.divider()
         st.subheader("2. Carica da File (Excel / CSV)")
 
-        uploaded_file = st.file_uploader("Carica File BOM (.xlsx, .xls, .csv)", type=["xlsx", "xls", "csv"])
+        # Utilizziamo una key dinamica legata allo stato per resettare il file_uploader dopo l'import
+        uploaded_file = st.file_uploader(
+            "Carica File BOM (.xlsx, .xls, .csv)", 
+            type=["xlsx", "xls", "csv"],
+            key=f"uploader_bom_{st.session_state['bom_uploader_key']}"
+        )
 
         if uploaded_file is not None:
             try:
@@ -127,6 +136,10 @@ def render():
                                         count_ins += 1
 
                                 conn.commit()
+                                
+                                # Incrementa la chiave per resettare automaticamente il file_uploader al reload
+                                st.session_state["bom_uploader_key"] += 1
+                                
                                 st.success(f"🎉 Importazione completata con successo per il modello **'{modello_finale if modello_finale else 'selezionato'}'**! Registrate/Aggiornate **{count_ins}** righe.")
                                 st.rerun()
                             except Exception as e:
